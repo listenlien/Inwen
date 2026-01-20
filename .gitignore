@@ -1,0 +1,14 @@
+# System files
+.DS_Store
+Thumbs.db
+
+# Go
+webhook/main
+webhook/*.exe
+webhook/*.test
+webhook/*.prof
+webhook/go.sum
+
+# Node/Extension junk (if any)
+node_modules/
+npm-debug.log
