@@ -1,6 +1,6 @@
 # Inwen
 
-Inwen is a Chrome extension that provides instant, AI-powered explanations for selected text on any webpage. It uses a local Go server to interface with Google's Gemini API, providing structured dictionary definitions, etymology, synonyms, antonyms, and context-aware translations.
+Inwen is a Chrome extension that provides instant, AI-powered explanations for selected text on any webpage. It uses a local Go server to interface with Google's Gemini API, providing structured dictionary definitions, etymology, synonyms, antonyms, and context-aware translations in Traditional Chinese.
 
 ## Features
 

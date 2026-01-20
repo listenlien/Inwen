@@ -65,6 +65,7 @@ func webhookHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	defer client.Close()
 
+	// The model can be referred to https://ai.google.dev/gemini-api/docs/models. For free tier, each model has different rate limits.
 	// model := client.GenerativeModel("gemini-3-flash-preview")
 	// model := client.GenerativeModel("gemini-2.5-flash")
 	model := client.GenerativeModel("gemini-2.5-flash-lite")
