@@ -4,17 +4,37 @@ document.addEventListener('mouseup', () => {
 
     if (selectedText.length > 0) {
         // Check if extension is enabled
-        chrome.storage.local.get('enabled', (result) => {
-            const isEnabled = result.enabled !== undefined ? result.enabled : true;
-            if (!isEnabled) return;
+        // Check if chrome.storage is available (it might not be in some contexts)
+        if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
+            chrome.storage.local.get('enabled', (result) => {
+                const isEnabled = result.enabled !== undefined ? result.enabled : true;
+                if (!isEnabled) return;
 
-            // Get the parent element's text as context
+                // Get the parent element's text as context
+                const context = selection.anchorNode.parentElement.innerText;
+
+                // Show loading popup immediately
+                showLoadingPopup();
+
+                // Send data to the background script
+                chrome.runtime.sendMessage({
+                    type: 'SEND_TO_WEBHOOK',
+                    word: selectedText,
+                    context: context,
+                    url: window.location.href
+                }, (response) => {
+                    if (response && response.success) {
+                        updatePopupContent(response.data);
+                    } else {
+                        updatePopupError(response ? response.error : 'Unknown error');
+                    }
+                });
+            });
+        } else {
+            // Fallback: if storage is not available, just proceed as enabled
             const context = selection.anchorNode.parentElement.innerText;
-
-            // Show loading popup immediately
             showLoadingPopup();
 
-            // Send data to the background script
             chrome.runtime.sendMessage({
                 type: 'SEND_TO_WEBHOOK',
                 word: selectedText,
@@ -27,7 +47,7 @@ document.addEventListener('mouseup', () => {
                     updatePopupError(response ? response.error : 'Unknown error');
                 }
             });
-        });
+        }
     }
 });
 

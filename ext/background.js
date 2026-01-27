@@ -1,6 +1,6 @@
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     if (message.type === 'SEND_TO_WEBHOOK') {
-        fetch('http://localhost:8080/webhook', {
+        fetch('http://localhost:8080/webhook/openrouter', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({

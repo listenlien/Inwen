@@ -2,6 +2,10 @@
 .DS_Store
 Thumbs.db
 
+# Environment variables (contains API keys)
+webhook/.env
+.env
+
 # Go
 webhook/main
 webhook/*.exe
