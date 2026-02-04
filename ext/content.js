@@ -3,6 +3,7 @@ document.addEventListener('mouseup', () => {
     const selectedText = selection.toString().trim();
 
     if (selectedText.length > 0) {
+        console.log('Inwen: selectedText', selectedText);
         // Check if extension is enabled
         // Check if chrome.storage is available (it might not be in some contexts)
         if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
@@ -10,8 +11,54 @@ document.addEventListener('mouseup', () => {
                 const isEnabled = result.enabled !== undefined ? result.enabled : true;
                 if (!isEnabled) return;
 
+                // Validate if selected text contains valid English words
+                if (typeof nlp !== 'undefined') {
+                    const doc = nlp(selectedText);
+
+                    // 1. Check if it's more than one term (e.g., "hello world")
+                    const terms = doc.termList();
+                    if (terms.length !== 1) return false;
+
+                    // 2. Reject strings with numbers (e.g., GMT+8, v1.0, etc.)
+                    if (/[0-9]/.test(selectedText)) return false;
+
+                    // 3. Reject if it's just punctuation or symbols
+                    if (!/[a-zA-Z]/.test(selectedText)) return false;
+
+                    // 4. Check if it's a valid word
+                    const hasWords = doc.has('#Noun') || doc.has('#Verb') || doc.has('#Adjective') ||
+                        doc.has('#Adverb') || doc.has('#Pronoun') || doc.has('#Determiner');
+
+                    console.log('Inwen: hasWords', hasWords);
+
+                    if (!hasWords) {
+                        console.log('Inwen: Selected text does not contain valid words, skipping webhook');
+                        return;
+                    }
+                }
+
                 // Get the parent element's text as context
                 const context = selection.anchorNode.parentElement.innerText;
+
+                // Validate if context is a valid sentence or paragraph by nlp
+                if (typeof nlp !== 'undefined') {
+                    const doc = nlp(context);
+
+                    // 1. Check if it's more than one term (e.g., "hello world")
+                    const terms = doc.termList();
+                    if (terms.length <= 1) return false;
+
+                    // 2. Check if context has at least one sentence with verbs and nouns
+                    const hasSentences = doc.sentences().length > 0;
+                    const hasContent = doc.has('#Verb') && doc.has('#Noun');
+
+                    if (!hasSentences || !hasContent) {
+                        console.log('Inwen: Context is invalid or empty, skipping webhook');
+                        return;
+                    }
+
+                    console.log('Inwen: Context validation passed:', doc.sentences().length, 'sentences');
+                }
 
                 // Show loading popup immediately
                 showLoadingPopup();
@@ -30,23 +77,23 @@ document.addEventListener('mouseup', () => {
                     }
                 });
             });
-        } else {
-            // Fallback: if storage is not available, just proceed as enabled
-            const context = selection.anchorNode.parentElement.innerText;
-            showLoadingPopup();
+            // } else {
+            //     // Fallback: if storage is not available, just proceed as enabled
+            //     const context = selection.anchorNode.parentElement.innerText;
+            //     showLoadingPopup();
 
-            chrome.runtime.sendMessage({
-                type: 'SEND_TO_WEBHOOK',
-                word: selectedText,
-                context: context,
-                url: window.location.href
-            }, (response) => {
-                if (response && response.success) {
-                    updatePopupContent(response.data);
-                } else {
-                    updatePopupError(response ? response.error : 'Unknown error');
-                }
-            });
+            //     chrome.runtime.sendMessage({
+            //         type: 'SEND_TO_WEBHOOK',
+            //         word: selectedText,
+            //         context: context,
+            //         url: window.location.href
+            //     }, (response) => {
+            //         if (response && response.success) {
+            //             updatePopupContent(response.data);
+            //         } else {
+            //             updatePopupError(response ? response.error : 'Unknown error');
+            //         }
+            //     });
         }
     }
 });
@@ -195,6 +242,16 @@ function renderStructuredData(data) {
     return `
         <h2 style="margin: 0 0 16px 0; font-size: 24px; font-weight: 700; color: #2c3e50; border-bottom: 2px solid #3498db; padding-bottom: 8px; display: inline-block;">${word}</h2>
         
+        <div style="${styleSection} background-color: #f8f9fa; padding: 10px; border-radius: 6px; border-left: 3px solid #3498db;">
+            <span style="${styleLabel} color: #2980b9;">Meaning in Context</span>
+            <div style="${styleValue}">${context_meaning || '-'}</div>
+        </div>
+
+        <div style="${styleSection}">
+            <span style="${styleLabel}">Sentence Translation</span>
+            <div style="${styleValue} font-style: italic; color: #555;">${translation || '-'}</div>
+        </div>
+
         <div style="${styleSection}">
             <span style="${styleLabel}">Etymology</span>
             <div style="${styleValue}">${etymology || '-'}</div>
@@ -208,16 +265,6 @@ function renderStructuredData(data) {
         <div style="${styleSection}">
             <span style="${styleLabel}">Antonyms</span>
             <div style="${styleValue}">${renderWordList(antonyms)}</div>
-        </div>
-
-        <div style="${styleSection} background-color: #f8f9fa; padding: 10px; border-radius: 6px; border-left: 3px solid #3498db;">
-            <span style="${styleLabel} color: #2980b9;">Meaning in Context</span>
-            <div style="${styleValue}">${context_meaning || '-'}</div>
-        </div>
-
-        <div style="${styleSection}">
-            <span style="${styleLabel}">Sentence Translation</span>
-            <div style="${styleValue} font-style: italic; color: #555;">${translation || '-'}</div>
         </div>
     `;
 }

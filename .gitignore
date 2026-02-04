@@ -11,7 +11,6 @@ webhook/main
 webhook/*.exe
 webhook/*.test
 webhook/*.prof
-webhook/go.sum
 
 # Node/Extension junk (if any)
 node_modules/

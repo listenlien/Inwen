@@ -34,10 +34,11 @@ func geminiWebhookHandler(w http.ResponseWriter, r *http.Request) {
 
 	// Log the received data
 	fmt.Printf("[%s] Received webhook:\n", time.Now().Format(time.RFC3339))
-	fmt.Printf("  Word:    %s\n", req.Word)
-	fmt.Printf("  Context: %s\n", req.Context)
-	fmt.Printf("  Source:  %s\n", req.Source)
-	fmt.Printf("  Time:    %s\n", req.Timestamp)
+	fmt.Printf("  Word:     %s\n", req.Word)
+	fmt.Printf("  Context:  %s\n", req.Context)
+	fmt.Printf("  Source:   %s\n", req.Source)
+	fmt.Printf("  Language: %s\n", req.Language)
+	fmt.Printf("  Time:     %s\n", req.Timestamp)
 	fmt.Println("------------------------------------------------")
 
 	// Call Gemini API
@@ -57,18 +58,25 @@ func geminiWebhookHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	defer client.Close()
 
+	// Determine target language (default to Traditional Chinese)
+	targetLang := req.Language
+	if targetLang == "" || targetLang == "en" || targetLang == "en-US" {
+		targetLang = "Traditional Chinese"
+	}
+
 	// The model can be referred to https://ai.google.dev/gemini-api/docs/models. For free tier, each model has different rate limits.
-	model := client.GenerativeModel("gemini-3-flash-preview")
+	// model := client.GenerativeModel("gemini-3-flash-preview")
 	// model := client.GenerativeModel("gemini-2.5-flash")
-	// model := client.GenerativeModel("gemini-2.5-flash-lite")
-	prompt := fmt.Sprintf(`Explain the word "%s" in Traditional Chinese. Return a JSON object with the following keys:
+	model := client.GenerativeModel("gemini-2.5-flash-lite")
+	prompt := fmt.Sprintf(`Explain the word "%s" in %s. Return a JSON string with the following keys:
 	- "word": The word itself.
-	- "etymology": The etymology of the word in Traditional Chinese.
-	- "synonyms": A list of synonyms, where each item is an object with "word" (English) and "translation" (Traditional Chinese).
-	- "antonyms": A list of antonyms, where each item is an object with "word" (English) and "translation" (Traditional Chinese).
-	- "context_meaning": The meaning of the word in the context of this sentence: "%s" in Traditional Chinese.
-	- "translation": The translation of the sentence into Traditional Chinese.
-	The total context words should be less than 300. Do not include markdown code blocks.`, req.Word, req.Context)
+	- "etymology": The etymology of the word in %s.
+	- "synonyms": A list of synonyms, where each item is an object with "word" (English) and "translation" (%s).
+	- "antonyms": A list of antonyms, where each item is an object with "word" (English) and "translation" (%s).
+	- "context_meaning": The meaning of the word in the context of this sentence: "%s" in %s.
+	- "translation": The translation of the sentence into %s.
+	The total context words should be less than 300. Do not include markdown code blocks.`,
+		req.Word, targetLang, targetLang, targetLang, targetLang, req.Context, targetLang, targetLang)
 
 	resp, err := model.GenerateContent(ctx, genai.Text(prompt))
 	if err != nil {
