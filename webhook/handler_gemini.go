@@ -68,15 +68,58 @@ func geminiWebhookHandler(w http.ResponseWriter, r *http.Request) {
 	// model := client.GenerativeModel("gemini-3-flash-preview")
 	// model := client.GenerativeModel("gemini-2.5-flash")
 	model := client.GenerativeModel("gemini-2.5-flash-lite")
-	prompt := fmt.Sprintf(`Explain the word "%s" in %s. Return a JSON string with the following keys:
-	- "word": The word itself.
-	- "etymology": The etymology of the word in %s.
-	- "synonyms": A list of synonyms, where each item is an object with "word" (English) and "translation" (%s).
-	- "antonyms": A list of antonyms, where each item is an object with "word" (English) and "translation" (%s).
-	- "context_meaning": The meaning of the word in the context of this sentence: "%s" in %s.
-	- "translation": The translation of the sentence into %s.
-	The total context words should be less than 300. Do not include markdown code blocks.`,
-		req.Word, targetLang, targetLang, targetLang, targetLang, req.Context, targetLang, targetLang)
+
+	// Define structured output schema
+	schema := &genai.Schema{
+		Type: genai.TypeObject,
+		Properties: map[string]*genai.Schema{
+			"word":      {Type: genai.TypeString, Description: "The word itself"},
+			"etymology": {Type: genai.TypeString, Description: "The etymology of the word in context"},
+			"synonyms": {
+				Type:        genai.TypeArray,
+				Description: "A list of synonyms",
+				Items: &genai.Schema{
+					Type: genai.TypeObject,
+					Properties: map[string]*genai.Schema{
+						"word":        {Type: genai.TypeString, Description: "Synonym in original language"},
+						"translation": {Type: genai.TypeString, Description: "Translation of the synonym"},
+					},
+					Required: []string{"word", "translation"},
+				},
+			},
+			"antonyms": {
+				Type:        genai.TypeArray,
+				Description: "A list of antonyms",
+				Items: &genai.Schema{
+					Type: genai.TypeObject,
+					Properties: map[string]*genai.Schema{
+						"word":        {Type: genai.TypeString, Description: "Antonym in original language"},
+						"translation": {Type: genai.TypeString, Description: "Translation of the antonym"},
+					},
+					Required: []string{"word", "translation"},
+				},
+			},
+			"context_meaning": {Type: genai.TypeString, Description: "The meaning of the word in the context"},
+			"translation":     {Type: genai.TypeString, Description: "The translation of the sentence"},
+		},
+		Required: []string{"word", "context_meaning", "translation"},
+	}
+
+	// Configure the model with the schema
+	model.GenerationConfig = genai.GenerationConfig{
+		ResponseMIMEType: "application/json",
+		ResponseSchema:   schema,
+	}
+
+	prompt := fmt.Sprintf(`Explain the word "%s" in %s. Provide:
+	- The word itself
+	- Etymology (if English word)
+	- Synonyms with translations to %s
+	- Antonyms with translations to %s
+	- Use %s to explain the meaning of the word "%s" in the context: "%s"
+	- Translation of the sentence to %s
+	Keep the total response under 300 words.`,
+		req.Word, targetLang, targetLang, targetLang, targetLang, req.Word, req.Context, targetLang)
 
 	resp, err := model.GenerateContent(ctx, genai.Text(prompt))
 	if err != nil {

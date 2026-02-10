@@ -11,8 +11,20 @@ import (
 )
 
 type OpenRouterRequest struct {
-	Model    string          `json:"model"`
-	Messages []OpenRouterMsg `json:"messages"`
+	Model          string          `json:"model"`
+	Messages       []OpenRouterMsg `json:"messages"`
+	ResponseFormat *ResponseFormat `json:"response_format,omitempty"`
+}
+
+type ResponseFormat struct {
+	Type       string      `json:"type"`
+	JSONSchema *JSONSchema `json:"json_schema,omitempty"`
+}
+
+type JSONSchema struct {
+	Name   string                 `json:"name"`
+	Strict bool                   `json:"strict"`
+	Schema map[string]interface{} `json:"schema"`
 }
 
 type OpenRouterMsg struct {
@@ -70,29 +82,37 @@ func openRouterWebhookHandler(w http.ResponseWriter, r *http.Request) {
 		targetLang = "Traditional Chinese"
 	}
 
-	// Prepare the prompt
-	prompt := fmt.Sprintf(`Explain the word "%s" in %s. Return a JSON object with the following keys:
-	- "word": The word itself.
-	- "etymology": The etymology of the word in %s.
-	- "synonyms": A list of synonyms, where each item is an object with "word" (English) and "translation" (%s).
-	- "antonyms": A list of antonyms, where each item is an object with "word" (English) and "translation" (%s).
-	- "context_meaning": The meaning of the word in the context of this sentence: "%s" in %s.
-	- "translation": The translation of the sentence into %s.
-	The total context words should be less than 300. Do not include markdown code blocks.`,
-		req.Word, targetLang, targetLang, targetLang, targetLang, req.Context, targetLang, targetLang)
+	// Prepare the prompt (include structure since we're using json_object mode)
+	prompt := fmt.Sprintf(`Explain the word "%s" in %s. Return a JSON object with these exact fields:
+{
+  "word": "the word itself",
+  "etymology": "etymology of the word in context (if applicable)",
+  "synonyms": [{"word": "synonym in original language", "translation": "translation"}],
+  "antonyms": [{"word": "antonym in original language", "translation": "translation"}],
+  "context_meaning": "meaning of the word in this context",
+  "translation": "translation of the sentence"
+}
 
-	// Prepare OpenRouter API request
-	// Free models available: google/gemini-2.0-flash-exp:free, qwen/qwen-2.5-72b-instruct:free
-	// meta-llama/llama-3.1-8b-instruct:free, microsoft/phi-3-medium-128k-instruct:free, etc.
+Context sentence: "%s"
+Target language for translations: %s
+Keep the total response under 300 words.`,
+		req.Word, targetLang, req.Context, targetLang)
+
+	// Prepare OpenRouter API request with JSON mode
+	// Using json_object mode instead of json_schema for broader model compatibility
 	// See: https://openrouter.ai/models?order=newest&supported_parameters=tools&max_price=0
 	openRouterReq := OpenRouterRequest{
-		Model: "meta-llama/llama-3.3-70b-instruct:free", // qwen/qwen-2.5-72b-instruct:free
-		// Model: "google/gemini-2.0-flash-exp:free", // Reliable free model with good multilingual support
+		// Model: "meta-llama/llama-3.3-70b-instruct:free", // Supports json_object mode
+		// Model: "google/gemini-2.0-flash-exp:free", // Supports structured output via response_format
+		Model: "openrouter/auto:free", // Automatically selects free models that support structured outputs
 		Messages: []OpenRouterMsg{
 			{
 				Role:    "user",
 				Content: prompt,
 			},
+		},
+		ResponseFormat: &ResponseFormat{
+			Type: "json_object", // Simpler format, more widely supported than json_schema
 		},
 	}
 

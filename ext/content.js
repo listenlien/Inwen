@@ -1,4 +1,4 @@
-document.addEventListener('mouseup', () => {
+document.addEventListener('dblclick', () => {
     const selection = window.getSelection();
     const selectedText = selection.toString().trim();
 
