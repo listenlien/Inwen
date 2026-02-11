@@ -1,14 +1,19 @@
 # Inwen
 
-Inwen is a Chrome extension that provides instant, AI-powered explanations for selected text on any webpage. It uses a local Go server to interface with multiple AI APIs (Gemini and OpenRouter), providing structured dictionary definitions, etymology, synonyms, antonyms, and context-aware translations in Traditional Chinese.
+Inwen is a Chrome extension that provides instant, AI-powered explanations for selected text on any webpage. It uses a local Go server to interface with multiple AI APIs (Gemini and OpenRouter), providing structured dictionary definitions with type-safe JSON output, etymology, synonyms, antonyms, and context-aware translations. **The output language automatically adapts to your browser's language settings** (defaults to Traditional Chinese).
 
 ## Features
 
 - **Dual API Support**: Choose between Google Gemini API or OpenRouter (with access to multiple free models)
+- **Structured Output**: Both APIs use structured JSON schemas for reliable, type-safe responses
+  - Gemini: Native `genai.Schema` with strict validation
+  - OpenRouter: JSON object mode for broader model compatibility
 - **Contextual Analysis**: Explains words based on the sentence they appear in
+- **Auto Language Detection**: Output language automatically matches your browser's language settings (defaults to Traditional Chinese)
+- **Double-Click Activation**: Simply double-click any word to see its explanation
 - **Structured Display**: Clean popup showing:
   - Word & Etymology
-  - Synonyms & Antonyms (with translations)
+  - Synonyms & Antonyms (properly structured arrays with translations)
   - Meaning in Context
   - Sentence Translation
 - **Interactive UI**:
@@ -31,8 +36,8 @@ Inwen is a Chrome extension that provides instant, AI-powered explanations for s
 Inwen/
 ├── webhook/              # Go backend server
 │   ├── main.go          # Server entry point
-│   ├── gemini_handler.go    # Gemini API handler
-│   ├── openrouter_handler.go # OpenRouter API handler
+│   ├── handler_gemini.go    # Gemini API handler with structured output
+│   ├── handler_openrouter.go # OpenRouter API handler with JSON mode
 │   ├── types.go         # Shared data structures
 │   ├── .env             # Environment variables (not in git)
 │   ├── go.mod           # Go dependencies
@@ -40,7 +45,8 @@ Inwen/
 └── ext/                 # Chrome extension
     ├── manifest.json    # Extension configuration
     ├── background.js    # Background service worker
-    ├── content.js       # Content script (injected into pages)
+    ├── content.js       # Content script (double-click handler)
+    ├── config.js        # Configuration for provider selection
     ├── popup.html       # Extension popup UI
     └── popup.js         # Popup logic
 ```
@@ -104,8 +110,13 @@ By default, the extension uses the OpenRouter endpoint. To change this:
 ## Usage
 
 1. **Enable the Extension**: Click the Inwen icon in your browser toolbar and ensure the switch is set to "Enabled"
-2. **Select Text**: Highlight any word or phrase on a webpage
-3. **View Results**: A popup will appear with the AI-powered analysis
+2. **Select Provider**: Choose your preferred AI provider (Gemini or OpenRouter) from the popup
+3. **Double-Click a Word**: Simply double-click any word on a webpage to trigger the analysis
+4. **View Results**: A popup will appear with the AI-powered analysis showing:
+   - Word etymology and meaning
+   - Synonyms and antonyms with translations
+   - Context-aware explanation
+   - Sentence translation
 
 ## API Endpoints
 
@@ -118,9 +129,12 @@ Uses Google's Gemini API directly.
   "word": "example",
   "context": "This is an example sentence.",
   "source": "https://example.com",
+  "language": "zh-TW",
   "timestamp": "2026-01-27T12:00:00Z"
 }
 ```
+
+> **Note**: The `language` field is automatically populated from the browser's language settings. If not provided or set to English (`en`, `en-US`), it defaults to Traditional Chinese (`zh-TW`).
 
 ### `/webhook/openrouter` (POST)
 Uses OpenRouter API with access to multiple free models.
@@ -128,27 +142,46 @@ Uses OpenRouter API with access to multiple free models.
 **Current Model**: `meta-llama/llama-3.3-70b-instruct:free`
 
 **Other Free Models Available**:
-- `meta-llama/llama-3.1-405b-instruct:free`
+- `meta-llama/llama-3.3-70b-instruct:free` (supports json_object mode)
 - `qwen/qwen-2.5-72b-instruct:free`
 - `mistralai/mistral-small-3.1-24b:free`
 
 See all free models: https://openrouter.ai/models?max_price=0
+
+> **Note**: OpenRouter uses `json_object` response format for broader model compatibility. Not all models support the advanced `json_schema` format.
 
 **Request Body**: Same as Gemini endpoint
 
 **Response** (both endpoints):
 ```json
 {
-  "explanation": "{\"word\":\"example\",\"etymology\":\"...\",\"synonyms\":[...],\"antonyms\":[...],\"context_meaning\":\"...\",\"translation\":\"...\"}"
+  "explanation": {
+    "word": "example",
+    "etymology": "From Latin 'exemplum' meaning 'sample, model'",
+    "synonyms": [
+      {"word": "instance", "translation": "實例"},
+      {"word": "sample", "translation": "樣本"}
+    ],
+    "antonyms": [
+      {"word": "counterexample", "translation": "反例"}
+    ],
+    "context_meaning": "A thing characteristic of its kind or illustrating a general rule",
+    "translation": "這是一個例句。"
+  }
 }
 ```
+
+> **Structured Output**: Both APIs now return properly structured JSON with type-safe arrays for synonyms and antonyms, ensuring consistent and reliable data parsing.
 
 ## Development
 
 ### Backend (Go)
 - **Entry Point**: `webhook/main.go`
-- **Handlers**: `webhook/gemini_handler.go`, `webhook/openrouter_handler.go`
+- **Handlers**: 
+  - `webhook/handler_gemini.go` - Uses `genai.Schema` for strict JSON validation
+  - `webhook/handler_openrouter.go` - Uses `json_object` response format
 - **Environment**: Uses `godotenv` to load `.env` file automatically
+- **Structured Output**: Both handlers enforce type-safe JSON schemas
 
 ### Frontend (Chrome Extension)
 - **Content Script**: `ext/content.js` - Handles text selection and popup display
