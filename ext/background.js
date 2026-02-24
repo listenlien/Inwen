@@ -6,9 +6,12 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         // Get provider preference from storage
         chrome.storage.local.get('provider', (result) => {
             const provider = result.provider || 'gemini';
-            const webhookUrl = provider === 'openrouter'
-                ? 'http://localhost:8080/webhook/openrouter'
-                : 'http://localhost:8080/webhook/gemini';
+            const webhookUrls = {
+                gemini: 'http://localhost:8088/webhook/gemini',
+                openrouter: 'http://localhost:8088/webhook/openrouter',
+                ollama: 'http://localhost:8088/webhook/ollama',
+            };
+            const webhookUrl = webhookUrls[provider] || webhookUrls.gemini;
 
             console.log('Inwen: Using provider:', provider, 'URL:', webhookUrl);
 

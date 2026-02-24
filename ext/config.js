@@ -5,7 +5,8 @@ const CONFIG = {
 
     // Alternative endpoints:
     // WEBHOOK_URL: 'http://localhost:8080/webhook/gemini',
-    // WEBHOOK_URL: 'https://your-domain.com/webhook/openrouter',
+    // WEBHOOK_URL: 'http://localhost:8080/webhook/openrouter',
+    // WEBHOOK_URL: 'http://localhost:8080/webhook/openwebui',
 };
 
 // Make config available globally

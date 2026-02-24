@@ -5,15 +5,19 @@ services:
       dockerfile: Dockerfile
     container_name: inwen
     ports:
-      - "8080:8080"
+      - "8088:8088"
     environment:
       - GEMINI_API_KEY=${GEMINI_API_KEY}
       - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
+      - OLLAMA_URL=http://open-webui:11434
+      - OLLAMA_MODEL=${OLLAMA_MODEL}
     env_file:
       - .env
     restart: unless-stopped
+    depends_on:
+      - open-webui
     healthcheck:
-      test: [ "CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8080/health" ]
+      test: [ "CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8088/health" ]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -21,6 +25,25 @@ services:
     networks:
       - inwen-network
 
+  open-webui:
+    image: ghcr.io/open-webui/open-webui:ollama
+    container_name: inwen-openwebui
+    ports:
+      - "3003:8080" # Open WebUI interface accessible from host
+      # port 11434 (Ollama) is NOT exposed to host; reachable internally via service name
+    volumes:
+      - ollama:/root/.ollama
+      - open-webui:/app/backend/data
+    environment:
+      - OLLAMA_HOST=0.0.0.0:11434
+    restart: always
+    networks:
+      - inwen-network
+
 networks:
   inwen-network:
     driver: bridge
+
+volumes:
+  ollama:
+  open-webui:

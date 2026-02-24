@@ -1,222 +1,207 @@
 # Inwen
 
-Inwen is a Chrome extension that provides instant, AI-powered explanations for selected text on any webpage. It uses a local Go server to interface with multiple AI APIs (Gemini and OpenRouter), providing structured dictionary definitions with type-safe JSON output, etymology, synonyms, antonyms, and context-aware translations. **The output language automatically adapts to your browser's language settings** (defaults to Traditional Chinese).
+Inwen is a Chrome extension that provides instant, AI-powered explanations for selected text on any webpage. It uses a local Go server to interface with multiple AI backends (Gemini, OpenRouter, and a self-hosted Ollama instance), returning structured dictionary definitions with etymology, synonyms, antonyms, and context-aware translations. **The output language automatically adapts to your browser's language settings** (defaults to Traditional Chinese).
 
 ## Features
 
-- **Dual API Support**: Choose between Google Gemini API or OpenRouter (with access to multiple free models)
-- **Structured Output**: Both APIs use structured JSON schemas for reliable, type-safe responses
-  - Gemini: Native `genai.Schema` with strict validation
-  - OpenRouter: JSON object mode for broader model compatibility
+- **Three AI Providers**: Choose between Google Gemini, OpenRouter, or a locally-hosted Ollama model
+- **Structured Output**: All providers enforce JSON output for reliable, type-safe responses
+  - Gemini: Native `genai.Schema` strict validation
+  - OpenRouter: `json_object` mode for broad model compatibility
+  - Ollama: `json_object` response format via OpenAI-compatible API
 - **Contextual Analysis**: Explains words based on the sentence they appear in
-- **Auto Language Detection**: Output language automatically matches your browser's language settings (defaults to Traditional Chinese)
-- **Double-Click Activation**: Simply double-click any word to see its explanation
+- **Auto Language Detection**: Output language matches your browser's language settings (defaults to Traditional Chinese)
+- **Double-Click Activation**: Simply double-click any word to trigger the analysis
 - **Structured Display**: Clean popup showing:
   - Word & Etymology
-  - Synonyms & Antonyms (properly structured arrays with translations)
+  - Synonyms & Antonyms (with translations)
   - Meaning in Context
   - Sentence Translation
 - **Interactive UI**:
   - Loading state indicator
   - Close via ESC key or clicking outside
   - Enable/Disable toggle via extension icon
-- **Privacy-First Design**: Uses a local proxy server to handle API keys securely (keys stay on your machine)
+- **Privacy-First Design**: API keys stay on your machine; Ollama runs 100% locally
 
 ## Prerequisites
 
-- **Go**: [Download and install Go](https://go.dev/dl/)
 - **Google Chrome**: Or any Chromium-based browser (Brave, Edge, etc.)
-- **API Keys**: 
-  - **Gemini API Key** (optional): Get one from [Google AI Studio](https://aistudio.google.com/)
-  - **OpenRouter API Key** (optional): Get one from [OpenRouter](https://openrouter.ai/keys)
+- **Docker & Docker Compose**: For running the webhook server and Ollama (recommended)
+- Or **Go 1.21+**: For running the webhook server natively
+- **API Keys** (only needed for cloud providers):
+  - **Gemini API Key** (optional): From [Google AI Studio](https://aistudio.google.com/)
+  - **OpenRouter API Key** (optional): From [OpenRouter](https://openrouter.ai/keys)
 
 ## Project Structure
 
 ```
 Inwen/
-├── webhook/              # Go backend server
-│   ├── main.go          # Server entry point
-│   ├── handler_gemini.go    # Gemini API handler with structured output
-│   ├── handler_openrouter.go # OpenRouter API handler with JSON mode
-│   ├── types.go         # Shared data structures
-│   ├── .env             # Environment variables (not in git)
-│   ├── go.mod           # Go dependencies
-│   └── go.sum           # Go dependency checksums
-└── ext/                 # Chrome extension
-    ├── manifest.json    # Extension configuration
-    ├── background.js    # Background service worker
-    ├── content.js       # Content script (double-click handler)
-    ├── config.js        # Configuration for provider selection
-    ├── popup.html       # Extension popup UI
-    └── popup.js         # Popup logic
+├── webhook/                   # Go backend server
+│   ├── main.go                # Server entry point (port 8088)
+│   ├── handler_gemini.go      # Gemini API handler (structured schema output)
+│   ├── handler_openrouter.go  # OpenRouter handler (json_object mode)
+│   ├── handler_ollama.go      # Ollama handler (local LLM, json_object mode)
+│   ├── types.go               # Shared request types
+│   ├── docker-compose.yml     # Runs webhook + open-webui/Ollama together
+│   ├── Dockerfile             # Webhook server image
+│   ├── .env                   # Environment variables (not in git)
+│   ├── go.mod
+│   └── go.sum
+└── ext/                       # Chrome extension
+    ├── manifest.json
+    ├── background.js          # Routes requests to the selected provider
+    ├── content.js             # Double-click handler & popup display
+    ├── config.js              # Endpoint reference
+    ├── popup.html             # Provider selector UI
+    └── popup.js               # Popup state management
 ```
 
 ## Setup
 
-### 1. Configure API Keys
+### Option A — Docker Compose (recommended)
 
-1. Navigate to the `webhook` directory:
+This runs the Go webhook server and the Ollama+Open WebUI container together on a shared internal network. Ollama is **not** exposed to the host on port 11434; the webhook reaches it via the Docker service name.
+
+```bash
+cd webhook
+```
+
+1. Edit `.env` with your cloud API keys (leave blank if using Ollama only):
+   ```dotenv
+   GEMINI_API_KEY=your_key_here
+   OPENROUTER_API_KEY=your_key_here
+
+   # Ollama (resolved internally via Docker network — do not change OLLAMA_URL here)
+   OLLAMA_URL=http://open-webui:11434
+   OLLAMA_MODEL=phi3:3.8b
+   ```
+
+2. Start everything:
    ```bash
-   cd webhook
+   docker compose up -d
    ```
 
-2. Create/edit the `.env` file with your API keys:
+3. Pull a model inside the Ollama container (first run only):
    ```bash
-   # Gemini API Configuration
-   GEMINI_API_KEY=your_gemini_api_key_here
-
-   # OpenRouter API Configuration
-   OPENROUTER_API_KEY=your_openrouter_api_key_here
+   docker exec inwen-openwebui ollama pull phi3:3.8b
+   # or any other model, e.g.: ollama pull gemma3:4b
    ```
 
-   **Note**: You only need to configure the API(s) you plan to use.
+4. Services started:
+   - **Webhook server**: `http://localhost:8088`
+   - **Open WebUI** (optional UI for Ollama): `http://localhost:3003`
 
-### 2. Start the Webhook Server
+### Option B — Run the webhook server natively
 
-1. Install dependencies:
-   ```bash
-   go mod download
-   ```
+```bash
+cd webhook
+go mod download
+go run .
+```
 
-2. Run the server:
-   ```bash
-   go run .
-   ```
+Server will start on `http://localhost:8088`.
 
-   You should see:
-   ```
-   Server is running on http://localhost:8080
-   Available endpoints:
-     - /webhook/gemini (Gemini API)
-     - /webhook/openrouter (OpenRouter API)
-   ```
+> When running natively, set `OLLAMA_URL=http://localhost:11434` in `.env` and run Ollama separately.
 
-### 3. Install the Extension
+### Install the Extension
 
-1. Open Chrome and go to `chrome://extensions`
-2. Enable **Developer mode** (toggle in the top right)
-3. Click **Load unpacked**
-4. Select the `Inwen/ext` directory
-
-### 4. Configure the Extension
-
-By default, the extension uses the OpenRouter endpoint. To change this:
-
-1. Edit `ext/background.js`
-2. Change the `fetch` URL to your preferred endpoint:
-   - For Gemini: `http://localhost:8080/webhook/gemini`
-   - For OpenRouter: `http://localhost:8080/webhook/openrouter`
+1. Open Chrome and navigate to `chrome://extensions`
+2. Enable **Developer mode** (top-right toggle)
+3. Click **Load unpacked** and select the `Inwen/ext` directory
 
 ## Usage
 
-1. **Enable the Extension**: Click the Inwen icon in your browser toolbar and ensure the switch is set to "Enabled"
-2. **Select Provider**: Choose your preferred AI provider (Gemini or OpenRouter) from the popup
-3. **Double-Click a Word**: Simply double-click any word on a webpage to trigger the analysis
-4. **View Results**: A popup will appear with the AI-powered analysis showing:
-   - Word etymology and meaning
-   - Synonyms and antonyms with translations
-   - Context-aware explanation
-   - Sentence translation
+1. **Enable the Extension**: Click the Inwen icon and toggle to **Enabled**
+2. **Select Provider**: Choose your AI provider from the popup:
+   - **Google Gemini** — cloud, fast, structured schema
+   - **OpenRouter** — cloud, access to many free models
+   - **Ollama (Local)** — fully local, private, no API key needed
+3. **Double-Click a Word**: On any webpage to trigger the analysis
+4. **View Results**: A popup shows etymology, synonyms, antonyms, contextual meaning, and sentence translation
 
 ## API Endpoints
 
-### `/webhook/gemini` (POST)
-Uses Google's Gemini API directly.
+All endpoints accept the same `POST` request body:
 
-**Request Body:**
 ```json
 {
-  "word": "example",
-  "context": "This is an example sentence.",
+  "word": "arise",
+  "context": "Scenarios often arise where primary resolution mechanisms fail.",
   "source": "https://example.com",
   "language": "zh-TW",
-  "timestamp": "2026-01-27T12:00:00Z"
+  "timestamp": "2026-02-24T09:00:00Z"
 }
 ```
 
-> **Note**: The `language` field is automatically populated from the browser's language settings. If not provided or set to English (`en`, `en-US`), it defaults to Traditional Chinese (`zh-TW`).
+> The `language` field is auto-populated from browser settings. If empty or English (`en`, `en-US`), it defaults to Traditional Chinese.
 
-### `/webhook/openrouter` (POST)
-Uses OpenRouter API with access to multiple free models.
+| Endpoint | Provider | Notes |
+|---|---|---|
+| `POST /webhook/gemini` | Google Gemini | Structured `genai.Schema`, requires `GEMINI_API_KEY` |
+| `POST /webhook/openrouter` | OpenRouter | `json_object` mode, requires `OPENROUTER_API_KEY` |
+| `POST /webhook/ollama` | Ollama (local) | `json_object` mode, no API key, model set via `OLLAMA_MODEL` |
+| `GET /health` | — | Returns `{"status":"healthy"}` |
 
-**Current Model**: `meta-llama/llama-3.3-70b-instruct:free`
-
-**Other Free Models Available**:
-- `meta-llama/llama-3.3-70b-instruct:free` (supports json_object mode)
-- `qwen/qwen-2.5-72b-instruct:free`
-- `mistralai/mistral-small-3.1-24b:free`
-
-See all free models: https://openrouter.ai/models?max_price=0
-
-> **Note**: OpenRouter uses `json_object` response format for broader model compatibility. Not all models support the advanced `json_schema` format.
-
-**Request Body**: Same as Gemini endpoint
-
-**Response** (both endpoints):
+**Response** (all endpoints):
 ```json
 {
-  "explanation": {
-    "word": "example",
-    "etymology": "From Latin 'exemplum' meaning 'sample, model'",
-    "synonyms": [
-      {"word": "instance", "translation": "實例"},
-      {"word": "sample", "translation": "樣本"}
-    ],
-    "antonyms": [
-      {"word": "counterexample", "translation": "反例"}
-    ],
-    "context_meaning": "A thing characteristic of its kind or illustrating a general rule",
-    "translation": "這是一個例句。"
-  }
+  "explanation": "{\"word\":\"arise\",\"etymology\":\"...\",\"synonyms\":[...],\"antonyms\":[...],\"context_meaning\":\"...\",\"translation\":\"...\"}"
 }
 ```
 
-> **Structured Output**: Both APIs now return properly structured JSON with type-safe arrays for synonyms and antonyms, ensuring consistent and reliable data parsing.
+> The `explanation` field is a JSON string — the extension parses it with `JSON.parse()`.
+
+## Environment Variables
+
+| Variable | Default | Description |
+|---|---|---|
+| `GEMINI_API_KEY` | — | Google Gemini API key |
+| `OPENROUTER_API_KEY` | — | OpenRouter API key |
+| `OLLAMA_URL` | `http://open-webui:11434` | Ollama base URL (Docker internal) |
+| `OLLAMA_MODEL` | `phi3:3.8b` | Model name as pulled in Ollama |
+| `WEBHOOK_BASE_URL` | `http://localhost:8088` | Used as HTTP-Referer for OpenRouter |
+
+## Docker Compose Architecture
+
+```
+┌─────────────────────────────────────────────────────┐
+│                  inwen-network (bridge)              │
+│                                                     │
+│  ┌──────────────┐        ┌───────────────────────┐  │
+│  │    inwen     │──────▶│    inwen-openwebui     │  │
+│  │ (webhook)    │ :11434 │  (open-webui:ollama)   │  │
+│  │ port 8088    │        │  Ollama: 127→0.0.0.0   │  │
+│  └──────────────┘        │  WebUI: port 3003      │  │
+│        ▲                 └───────────────────────┘  │
+└────────┼────────────────────────────────────────────┘
+         │
+    Chrome Extension
+    localhost:8088
+```
+
+The webhook container uses the **Docker service name** `open-webui` to reach Ollama at port 11434 on the internal network. `OLLAMA_HOST=0.0.0.0:11434` is set on the Ollama container so it binds to all interfaces (not just loopback).
 
 ## Development
 
-### Backend (Go)
-- **Entry Point**: `webhook/main.go`
-- **Handlers**: 
-  - `webhook/handler_gemini.go` - Uses `genai.Schema` for strict JSON validation
-  - `webhook/handler_openrouter.go` - Uses `json_object` response format
-- **Environment**: Uses `godotenv` to load `.env` file automatically
-- **Structured Output**: Both handlers enforce type-safe JSON schemas
+### Backend Changes
+1. Modify Go files in `webhook/`
+2. With Docker: `docker compose up --build -d`
+3. Natively: restart `go run .`
 
-### Frontend (Chrome Extension)
-- **Content Script**: `ext/content.js` - Handles text selection and popup display
-- **Background Script**: `ext/background.js` - Manages API requests
-- **Popup**: `ext/popup.html` + `ext/popup.js` - Extension settings UI
-
-### Making Changes
-
-**Backend Changes:**
-1. Modify the Go files
-2. Restart the server (`Ctrl+C` then `go run .`)
-
-**Extension Changes:**
-1. Modify the extension files
-2. Go to `chrome://extensions`
-3. Click the reload button on the Inwen extension
-4. Refresh any open web pages
+### Extension Changes
+1. Modify files in `ext/`
+2. Go to `chrome://extensions` → click **Reload** on Inwen
+3. Refresh any open web pages
 
 ## Troubleshooting
 
-### "OPENROUTER_API_KEY environment variable not set"
-- Make sure you've created the `.env` file in the `webhook/` directory
-- Ensure the `.env` file contains your API key
-- Restart the server after adding the key
-
-### "Rate limited" errors
-- OpenRouter free tier has rate limits
-- Try switching to a different free model in `openrouter_handler.go`
-- Or add credits to your OpenRouter account
-
-### Extension not working
-- Check that the server is running on `http://localhost:8080`
-- Verify the endpoint URL in `ext/background.js` matches your server
-- Check the browser console for errors (F12)
-- Reload the extension in `chrome://extensions`
+| Symptom | Fix |
+|---|---|
+| `connection refused` on port 11434 | Add `OLLAMA_HOST=0.0.0.0:11434` to the `open-webui` service env (already in `docker-compose.yml`) |
+| `No choices in Ollama response` | The model may not be pulled yet: `docker exec inwen-openwebui ollama pull phi3:3.8b` |
+| `GEMINI_API_KEY not set` | Add the key to `webhook/.env` and restart |
+| Rate limited (OpenRouter) | Switch to a different free model in `handler_openrouter.go` |
+| Extension not working | Check the server is running on `:8088`, reload the extension at `chrome://extensions` |
 
 ## License
 
