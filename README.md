@@ -42,7 +42,7 @@ Inwen/
 │   ├── handler_openrouter.go  # OpenRouter handler (json_object mode)
 │   ├── handler_ollama.go      # Ollama handler (local LLM, json_object mode)
 │   ├── types.go               # Shared request types
-│   ├── docker-compose.yml     # Runs webhook + open-webui/Ollama together
+│   ├── docker-compose.yml     # Runs webhook in a Docker container
 │   ├── Dockerfile             # Webhook server image
 │   ├── .env                   # Environment variables (not in git)
 │   ├── go.mod
@@ -58,9 +58,9 @@ Inwen/
 
 ## Setup
 
-### Option A — Docker Compose (recommended)
+### Option A — Docker Compose
 
-This runs the Go webhook server and the Ollama+Open WebUI container together on a shared internal network. Ollama is **not** exposed to the host on port 11434; the webhook reaches it via the Docker service name.
+This runs the Go webhook server in a Docker container.
 
 ```bash
 cd webhook
@@ -71,25 +71,23 @@ cd webhook
    GEMINI_API_KEY=your_key_here
    OPENROUTER_API_KEY=your_key_here
 
-   # Ollama (resolved internally via Docker network — do not change OLLAMA_URL here)
-   OLLAMA_URL=http://open-webui:11434
+   # Ollama (Assuming Ollama is running natively on your Mac)
+   OLLAMA_URL=http://host.docker.internal:11434
    OLLAMA_MODEL=phi3:3.8b
    ```
 
-2. Start everything:
+2. Start the webhook server:
    ```bash
    docker compose up -d
    ```
 
-3. Pull a model inside the Ollama container (first run only):
+3. Ensure your Ollama instance has the model pulled:
    ```bash
-   docker exec inwen-openwebui ollama pull phi3:3.8b
-   # or any other model, e.g.: ollama pull gemma3:4b
+   ollama pull phi3:3.8b
    ```
 
-4. Services started:
+4. Service started:
    - **Webhook server**: `http://localhost:8088`
-   - **Open WebUI** (optional UI for Ollama): `http://localhost:3003`
 
 ### Option B — Run the webhook server natively
 
@@ -101,7 +99,7 @@ go run .
 
 Server will start on `http://localhost:8088`.
 
-> When running natively, set `OLLAMA_URL=http://localhost:11434` in `.env` and run Ollama separately.
+> When running natively, set `OLLAMA_URL=http://localhost:11434` in `.env` and run Ollama normally.
 
 ### Install the Extension
 
@@ -157,29 +155,38 @@ All endpoints accept the same `POST` request body:
 |---|---|---|
 | `GEMINI_API_KEY` | — | Google Gemini API key |
 | `OPENROUTER_API_KEY` | — | OpenRouter API key |
-| `OLLAMA_URL` | `http://open-webui:11434` | Ollama base URL (Docker internal) |
+| `OLLAMA_URL` | `http://host.docker.internal:11434` | Ollama base URL |
 | `OLLAMA_MODEL` | `phi3:3.8b` | Model name as pulled in Ollama |
 | `WEBHOOK_BASE_URL` | `http://localhost:8088` | Used as HTTP-Referer for OpenRouter |
 
-## Docker Compose Architecture
+## Architecture
 
 ```
-┌─────────────────────────────────────────────────────┐
-│                  inwen-network (bridge)              │
-│                                                     │
-│  ┌──────────────┐        ┌───────────────────────┐  │
-│  │    inwen     │──────▶│    inwen-openwebui     │  │
-│  │ (webhook)    │ :11434 │  (open-webui:ollama)   │  │
-│  │ port 8088    │        │  Ollama: 127→0.0.0.0   │  │
-│  └──────────────┘        │  WebUI: port 3003      │  │
-│        ▲                 └───────────────────────┘  │
-└────────┼────────────────────────────────────────────┘
+┌──────────────────────────────────────────┐
+│              Docker container            │
+│                                          │
+│  ┌──────────────┐                        │
+│  │    inwen     │                        │
+│  │ (webhook)    │                        │
+│  │ port 8088    │                        │
+│  └──────────────┘                        │
+└────────┬─────────────────────────────────┘
          │
-    Chrome Extension
-    localhost:8088
+   Sends API Call via
+host.docker.internal:11434
+         │
+         ▼
+┌──────────────────────────────────────────┐
+│              Host Machine                │
+│                                          │
+│  ┌──────────────┐                        │
+│  │    Ollama    │                        │
+│  │ port 11434   │                        │
+│  └──────────────┘                        │
+└──────────────────────────────────────────┘
 ```
 
-The webhook container uses the **Docker service name** `open-webui` to reach Ollama at port 11434 on the internal network. `OLLAMA_HOST=0.0.0.0:11434` is set on the Ollama container so it binds to all interfaces (not just loopback).
+The webhook container uses `host.docker.internal` to reach Ollama at port 11434 executing natively on the host Mac.
 
 ## Development
 
@@ -197,8 +204,8 @@ The webhook container uses the **Docker service name** `open-webui` to reach Oll
 
 | Symptom | Fix |
 |---|---|
-| `connection refused` on port 11434 | Add `OLLAMA_HOST=0.0.0.0:11434` to the `open-webui` service env (already in `docker-compose.yml`) |
-| `No choices in Ollama response` | The model may not be pulled yet: `docker exec inwen-openwebui ollama pull phi3:3.8b` |
+| `connection refused` on port 11434 | Make sure Ollama is running natively on your host machine to accept connections |
+| `No choices in Ollama response` | The model may not be pulled yet: `ollama pull phi3:3.8b` |
 | `GEMINI_API_KEY not set` | Add the key to `webhook/.env` and restart |
 | Rate limited (OpenRouter) | Switch to a different free model in `handler_openrouter.go` |
 | Extension not working | Check the server is running on `:8088`, reload the extension at `chrome://extensions` |
